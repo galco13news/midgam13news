@@ -1109,6 +1109,7 @@
         <label>בחר פורמט</label>
         <select id="formatSelect">
           <option value="portrait45" selected>4:5 - פוסט אנכי</option>
+          <option value="update45">4:5 - עדכון תוצאות המדגם</option>
           <option value="widescreen169">16:9 - מסך רחב</option>
           <option value="story916">9:16 - סטורי עדכון מדגם</option>
         </select>
@@ -1195,8 +1196,11 @@
         </div>
 
         <div id="storyHeadingField" hidden>
-          <label for="storyHeading">כותרת מעל המדגם בסטורי</label>
-          <input id="storyHeading" value="עדכון תוצאות המדגם" placeholder="אפשר להשאיר ריק כדי להסתיר" />
+          <label for="storyHeading">כותרת מעל המדגם בעדכון</label>
+          <input id="storyHeading" value="תוצאות המדגם נכון ל־{שעה}" placeholder="אפשר להשאיר ריק כדי להסתיר" />
+          <label for="storyUpdateTime">שעת עדכון התוצאות</label>
+          <input id="storyUpdateTime" type="time" aria-label="שעת עדכון התוצאות" />
+          <div class="field-help">השעה תחליף את {שעה} בכותרת. לדוגמה: תוצאות המדגם נכון ל־22:00.</div>
         </div>
         <label>טקסט הכותרת</label>
         <input id="mainTitle" value="מדגם חדשות 13" />
@@ -1350,6 +1354,14 @@ const FORMAT_PRESETS = {
     help: 'ברירת המחדל היא 4:5 לפוסט. אפשר לעבור ל־16:9 או לסטורי 9:16 בלי לאבד את הנתונים שכבר הזנת.',
     backgroundDefault: './assets/knesset-background-neon.png',
     downloadName: 'poll-4x5-news13.png'
+  },
+  update45: {
+    key:'update45', label:'4:5', width:1080, height:1350, aspectRatio:'4 / 5',
+    sizeLabel:'1080×1350', eyebrow:'עדכון תוצאות המדגם · פוסט 4:5',
+    toolbar:'עדכון מדגם 4:5 | 1080×1350 | ייצוא PNG | נדרש סך הכל 120 מנדטים',
+    help:'עדכון תוצאות המדגם בפוסט 4:5, כולל שעת העדכון והשינויים לעומת המדגם הקודם.',
+    backgroundDefault:'./assets/knesset-background-neon.png',
+    downloadName:'poll-update-4x5-news13.png'
   },
   story916: {
     key: 'story916',
@@ -1638,6 +1650,10 @@ try{
 }catch(_err){}
 setEditorTab(savedEditorTab, { skipPersist: true });
 
+function isUpdateFormat(){
+  return currentFormatKey === 'story916' || currentFormatKey === 'update45';
+}
+
 function getActiveFormatPreset(){
   return FORMAT_PRESETS[currentFormatKey] || FORMAT_PRESETS.portrait45;
 }
@@ -1645,9 +1661,9 @@ function getActiveFormatPreset(){
 function syncFormatUiText(){
   const preset = getActiveFormatPreset();
   const storyHeadingField = document.getElementById('storyHeadingField');
-  if(storyHeadingField) storyHeadingField.hidden = currentFormatKey !== 'story916';
+  if(storyHeadingField) storyHeadingField.hidden = !isUpdateFormat();
   const comparisonSection = document.getElementById('comparisonSection');
-  if(comparisonSection) comparisonSection.hidden = currentFormatKey !== 'story916';
+  if(comparisonSection) comparisonSection.hidden = !isUpdateFormat();
   const eyebrow = document.getElementById('formatEyebrow');
   const sizeChip = document.getElementById('formatSizeChip');
   const toolbarMetaText = document.getElementById('toolbarMetaText');
@@ -1854,7 +1870,14 @@ function applyImportedState(state){
   }
 
   const storyHeadingInput = document.getElementById('storyHeading');
-  if(typeof state.storyHeading === 'string' && storyHeadingInput) storyHeadingInput.value = state.storyHeading;
+  if(typeof state.storyHeading === 'string' && storyHeadingInput){
+    storyHeadingInput.value = state.storyHeading === 'עדכון תוצאות המדגם'
+      ? 'תוצאות המדגם נכון ל־{שעה}' : state.storyHeading;
+  }
+  if(typeof state.storyUpdateTime === 'string'){
+    const timeInput = document.getElementById('storyUpdateTime');
+    if(timeInput) timeInput.value = state.storyUpdateTime;
+  }
   if(typeof state.mainTitle === 'string' && mainTitleInput) mainTitleInput.value = state.mainTitle;
   if(typeof state.secondaryTitle === 'string' && secondaryTitleInput) secondaryTitleInput.value = state.secondaryTitle;
   if(typeof state.tertiaryTitle === 'string' && tertiaryTitleInput) tertiaryTitleInput.value = state.tertiaryTitle;
@@ -1909,6 +1932,7 @@ function getCurrentDraftState(){
     comparisonBaseline,
     comparisonVisible,
     formatKey: currentFormatKey,
+    storyUpdateTime: document.getElementById('storyUpdateTime')?.value || '',
     storyHeading: document.getElementById('storyHeading')?.value || '',
     mainTitle: document.getElementById('mainTitle')?.value || '',
     secondaryTitle: document.getElementById('secondaryTitle')?.value || '',
@@ -2377,7 +2401,7 @@ clearBtn.addEventListener('click', ()=>{
   render();
 });
 
-['storyHeading','mainTitle','secondaryTitle','tertiaryTitle','splitMandatesTitle','splitMandatesSubtitle','splitBelowTitle','splitBelowSubtitle','splitBlocPieTitle','splitBlocPieSubtitle','creditText','blocTitle','blocNote'].forEach(id=>{
+['storyUpdateTime','storyHeading','mainTitle','secondaryTitle','tertiaryTitle','splitMandatesTitle','splitMandatesSubtitle','splitBelowTitle','splitBelowSubtitle','splitBlocPieTitle','splitBlocPieSubtitle','creditText','blocTitle','blocNote'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input', render);
 });
 
@@ -2602,7 +2626,8 @@ async function downloadPosterImage(){
   };
   const previewName = previewDownloadNames[previewTemplateMode];
   const fileName = previewName
-    ? (currentFormatKey === 'story916' ? previewName.replace('4x5', '9x16-story') : previewName)
+    ? (currentFormatKey === 'story916' ? previewName.replace('4x5', '9x16-story')
+      : currentFormatKey === 'update45' ? previewName.replace('4x5', 'update-4x5') : previewName)
     : getActiveFormatPreset().downloadName;
   try{
     const immediateDataUrl = canvas.toDataURL('image/png');
@@ -3202,7 +3227,7 @@ function partyComparisonKey(party){
 }
 
 function getMandateChange(item, kind){
-  if(currentFormatKey !== 'story916' || !comparisonVisible || !comparisonBaseline) return null;
+  if(!isUpdateFormat() || !comparisonVisible || !comparisonBaseline) return null;
   const key = kind === 'party' ? partyComparisonKey(item) : String(item.id || item.label || '');
   const entries = kind === 'party' ? comparisonBaseline.parties : comparisonBaseline.blocs;
   const old = entries.find(entry => entry.key === key);
@@ -3252,7 +3277,7 @@ function setManualComparisonValue(item, kind, rawValue){
 
 function syncManualComparisonFields(){
   const container = document.getElementById('manualComparisonFields');
-  if(!container || currentFormatKey !== 'story916') return;
+  if(!container || !isUpdateFormat()) return;
   // Do not replace a field while the user is typing in it.
   if(container.contains(document.activeElement)) return;
   container.replaceChildren();
@@ -3415,7 +3440,7 @@ function drawMandateValueRow(value, percentage, change, x, baselineY, width, num
 }
 
 function drawComparisonCaption(){
-  if(currentFormatKey !== 'story916' || !comparisonVisible || !comparisonBaseline) return;
+  if(!isUpdateFormat() || !comparisonVisible || !comparisonBaseline) return;
   const text = `השינוי לעומת ${comparisonBaseline.label}`;
   const isStory = currentFormatKey === 'story916';
   ctx.save();
@@ -3544,11 +3569,13 @@ async function downloadSplitTemplateImages(){
   let failed = false;
 
   try{
-    setCanvasFormat(savedFormatKey === 'story916' ? 'story916' : 'portrait45', { autoBackground: true });
+    setCanvasFormat(['story916','update45'].includes(savedFormatKey) ? savedFormatKey : 'portrait45', { autoBackground: true });
 
     for(const item of downloads){
       await item.render();
-      const ok = await downloadCanvasSnapshot(currentFormatKey === 'story916' ? item.name.replace('4x5', '9x16-story') : item.name);
+      const fileName = currentFormatKey === 'story916' ? item.name.replace('4x5', '9x16-story')
+        : currentFormatKey === 'update45' ? item.name.replace('4x5', 'update-4x5') : item.name;
+      const ok = await downloadCanvasSnapshot(fileName);
       if(!ok) failed = true;
       await new Promise(resolve => window.setTimeout(resolve, 300));
     }
@@ -3764,8 +3791,10 @@ const news13LogoData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABMIAAASRCA
 let news13TitleLogoPromise;
 
 function drawStoryHeading(layout){
-  if(currentFormatKey !== 'story916') return;
-  const text = String(document.getElementById('storyHeading')?.value || '').trim();
+  if(!isUpdateFormat()) return;
+  const heading = String(document.getElementById('storyHeading')?.value || '').trim();
+  const updateTime = document.getElementById('storyUpdateTime')?.value || '__:__';
+  const text = heading.replaceAll('{שעה}', `\u2066${updateTime}\u2069`);
   if(!text) return;
   ctx.save();
   const size = fitText(text, canvas.width - 180, 46, 22, "600");
